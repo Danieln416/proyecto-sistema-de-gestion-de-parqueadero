@@ -1,235 +1,275 @@
-const Vehiculo = require('../models/Vehiculo');
-const Cliente = require('../models/Cliente');
 const Espacio = require('../models/Espacio');
-const moment = require('moment');
+const Cliente = require('../models/Cliente');
+const Vehiculo = require('../models/Vehiculo');
+const Registro = require('../models/Registro'); // Asumiendo que tienes un modelo para registros de entrada/salida
 
-// @desc    Generar reporte de ocupación por período
-// @route   GET /api/reportes/ocupacion
-// @access  Private/Admin
+/**
+ * Genera reporte de ocupación actual del parqueadero
+ */
 exports.reporteOcupacion = async (req, res) => {
-  try {
-    const { inicio, fin, tipoVehiculo } = req.query;
-    
-    let fechaInicio = inicio ? moment(inicio).startOf('day').toDate() : moment().subtract(7, 'days').startOf('day').toDate();
-    let fechaFin = fin ? moment(fin).endOf('day').toDate() : moment().endOf('day').toDate();
-    
-    // Construir filtro
-    let filtro = {
-      horaEntrada: { $gte: fechaInicio, $lte: fechaFin }
-    };
-    
-    if (tipoVehiculo) {
-      filtro.tipoVehiculo = tipoVehiculo;
+    try {
+        // Obtener estadísticas de ocupación por tipo de espacio
+        const espaciosTotales = await Espacio.countDocuments();
+        const espaciosOcupados = await Espacio.countDocuments({ estado: 'ocupado' });
+        const espaciosMantenimiento = await Espacio.countDocuments({ estado: 'mantenimiento' });
+        const espaciosDisponibles = await Espacio.countDocuments({ estado: 'disponible' });
+        
+        // Ocupación por tipo de vehículo
+        const ocupacionCarros = await Espacio.countDocuments({ tipoEspacio: 'carro', estado: 'ocupado' });
+        const ocupacionMotos = await Espacio.countDocuments({ tipoEspacio: 'moto', estado: 'ocupado' });
+        const ocupacionBicicletas = await Espacio.countDocuments({ tipoEspacio: 'bicicleta', estado: 'ocupado' });
+        
+        // Disponibilidad por tipo de vehículo
+        const disponibilidadCarros = await Espacio.countDocuments({ tipoEspacio: 'carro', estado: 'disponible' });
+        const disponibilidadMotos = await Espacio.countDocuments({ tipoEspacio: 'moto', estado: 'disponible' });
+        const disponibilidadBicicletas = await Espacio.countDocuments({ tipoEspacio: 'bicicleta', estado: 'disponible' });
+        
+        // Calcular porcentaje de ocupación
+        const porcentajeOcupacion = espaciosTotales > 0 ? (espaciosOcupados / espaciosTotales) * 100 : 0;
+        
+        res.status(200).json({
+            totalEspacios: espaciosTotales,
+            resumen: {
+                ocupados: espaciosOcupados,
+                disponibles: espaciosDisponibles,
+                mantenimiento: espaciosMantenimiento,
+                porcentajeOcupacion: porcentajeOcupacion.toFixed(2) + '%'
+            },
+            ocupacionPorTipo: {
+                carros: ocupacionCarros,
+                motos: ocupacionMotos,
+                bicicletas: ocupacionBicicletas
+            },
+            disponibilidadPorTipo: {
+                carros: disponibilidadCarros,
+                motos: disponibilidadMotos,
+                bicicletas: disponibilidadBicicletas
+            }
+        });
+    } catch (error) {
+        console.error('Error al generar reporte de ocupación:', error);
+        res.status(500).json({ mensaje: 'Error al generar reporte de ocupación', error: error.message });
     }
-    
-    // Obtener datos
-    const vehiculos = await Vehiculo.find(filtro);
-    
-    // Calcular métricas
-    const totalVehiculos = vehiculos.length;
-    
-    // Agrupar por día para análisis de tendencias
-    const agrupacionPorDia = {};
-    
-    vehiculos.forEach(vehiculo => {
-      const dia = moment(vehiculo.horaEntrada).format('YYYY-MM-DD');
-      
-      if (!agrupacionPorDia[dia]) {
-        agrupacionPorDia[dia] = { fecha: dia, total: 0, carros: 0, motos: 0, bicicletas: 0 };
-      }
-      
-      agrupacionPorDia[dia].total += 1;
-      if (vehiculo.tipoVehiculo === 'carro') agrupacionPorDia[dia].carros += 1;
-      if (vehiculo.tipoVehiculo === 'moto') agrupacionPorDia[dia].motos += 1;
-      if (vehiculo.tipoVehiculo === 'bicicleta') agrupacionPorDia[dia].bicicletas += 1;
-    });
-    
-    // Convertir a array para la respuesta
-    const ocupacionDiaria = Object.values(agrupacionPorDia).sort((a, b) => a.fecha.localeCompare(b.fecha));
-    
-    // Obtener datos actuales de ocupación
-    const espaciosActuales = await Espacio.aggregate([
-      { $group: {
-        _id: '$estado',
-        cantidad: { $sum: 1 }
-      }}
-    ]);
-    
-    const resumenOcupacion = {
-      ocupados: 0,
-      disponibles: 0,
-      mantenimiento: 0
-    };
-    
-    espaciosActuales.forEach(item => {
-      resumenOcupacion[item._id] = item.cantidad;
-    });
-    
-    res.json({
-      periodo: {
-        inicio: fechaInicio,
-        fin: fechaFin
-      },
-      totalVehiculos,
-      ocupacionDiaria,
-      estadoActual: resumenOcupacion
-    });
-  } catch (error) {
-    console.error('Error al generar reporte de ocupación:', error);
-    res.status(500).json({ error: 'Error al generar el reporte de ocupación' });
-  }
 };
 
-// @desc    Generar reporte de ingresos
-// @route   GET /api/reportes/ingresos
-// @access  Private/Admin
+/**
+ * Genera reporte de ingresos en un rango de fechas
+ */
 exports.reporteIngresos = async (req, res) => {
-  try {
-    const { inicio, fin } = req.query;
-    
-    let fechaInicio = inicio ? moment(inicio).startOf('day').toDate() : moment().subtract(30, 'days').startOf('day').toDate();
-    let fechaFin = fin ? moment(fin).endOf('day').toDate() : moment().endOf('day').toDate();
-    
-    // Obtener vehículos con salida registrada en el período
-    const vehiculos = await Vehiculo.find({
-      horaSalida: { $gte: fechaInicio, $lte: fechaFin },
-      estado: 'retirado'
-    });
-    
-    // Calcular total de ingresos
-    let totalIngresos = 0;
-    const ingresosPorTipo = {
-      carro: 0,
-      moto: 0,
-      bicicleta: 0
-    };
-    
-    // Agrupar por día para análisis de tendencias
-    const ingresosPorDia = {};
-    
-    vehiculos.forEach(vehiculo => {
-      totalIngresos += vehiculo.costo;
-      ingresosPorTipo[vehiculo.tipoVehiculo] += vehiculo.costo;
-      
-      const dia = moment(vehiculo.horaSalida).format('YYYY-MM-DD');
-      
-      if (!ingresosPorDia[dia]) {
-        ingresosPorDia[dia] = { 
-          fecha: dia, 
-          total: 0,
-          vehiculos: 0
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        
+        // Validar fechas
+        let inicio = fechaInicio ? new Date(fechaInicio) : new Date(new Date().setDate(new Date().getDate() - 30)); // Por defecto, último mes
+        let fin = fechaFin ? new Date(fechaFin) : new Date();
+        
+        // Asegurar que la fecha fin sea hasta el final del día
+        fin.setHours(23, 59, 59, 999);
+        
+        // Consultar registros en el rango de fechas
+        const registros = await Registro.find({
+            fechaSalida: { $gte: inicio, $lte: fin },
+            estado: 'finalizado' // Solo considerar registros finalizados
+        }).populate('cliente', 'nombre documento tipoSuscripcion');
+        
+        // Calcular ingresos totales
+        const ingresoTotal = registros.reduce((total, registro) => total + (registro.valorTotal || 0), 0);
+        
+        // Ingresos por tipo de suscripción
+        const ingresosPorSuscripcion = {
+            ninguna: 0,
+            diaria: 0,
+            mensual: 0
         };
-      }
-      
-      ingresosPorDia[dia].total += vehiculo.costo;
-      ingresosPorDia[dia].vehiculos += 1;
-    });
-    
-    // Convertir a array para la respuesta
-    const datosPorDia = Object.values(ingresosPorDia).sort((a, b) => a.fecha.localeCompare(b.fecha));
-    
-    res.json({
-      periodo: {
-        inicio: fechaInicio,
-        fin: fechaFin
-      },
-      totalIngresos,
-      ingresosPorTipo,
-      datosPorDia,
-      totalVehiculos: vehiculos.length
-    });
-    
-  } catch (error) {
-    console.error('Error al generar reporte de ingresos:', error);
-    res.status(500).json({ error: 'Error al generar el reporte de ingresos' });
-  }
+        
+        // Ingresos por día
+        const ingresosPorDia = {};
+        
+        registros.forEach(registro => {
+            // Agregar a ingresos por suscripción
+            const tipoSuscripcion = registro.cliente?.tipoSuscripcion || 'ninguna';
+            ingresosPorSuscripcion[tipoSuscripcion] += registro.valorTotal || 0;
+            
+            // Agregar a ingresos por día
+            const fechaDia = registro.fechaSalida.toISOString().split('T')[0];
+            if (!ingresosPorDia[fechaDia]) {
+                ingresosPorDia[fechaDia] = 0;
+            }
+            ingresosPorDia[fechaDia] += registro.valorTotal || 0;
+        });
+        
+        res.status(200).json({
+            periodo: {
+                desde: inicio.toISOString().split('T')[0],
+                hasta: fin.toISOString().split('T')[0]
+            },
+            ingresoTotal,
+            ingresosPorSuscripcion,
+            ingresosPorDia,
+            totalRegistros: registros.length
+        });
+    } catch (error) {
+        console.error('Error al generar reporte de ingresos:', error);
+        res.status(500).json({ mensaje: 'Error al generar reporte de ingresos', error: error.message });
+    }
 };
 
-// @desc    Generar reporte de clientes frecuentes
-// @route   GET /api/reportes/clientes-frecuentes
-// @access  Private/Admin
-exports.reporteClientesFrecuentes = async (req, res) => {
-  try {
-    // Obtener clientes con historial
-    const clientes = await Cliente.aggregate([
-      { $project: {
-        nombre: 1,
-        documento: 1,
-        email: 1,
-        tipoSuscripcion: 1,
-        totalUsos: { $size: "$historicoUsos" },
-        totalGasto: { $sum: "$historicoUsos.costo" }
-      }},
-      { $sort: { totalUsos: -1 } },
-      { $limit: 10 }
-    ]);
-    
-    // Datos por tipo de suscripción
-    const clientesPorSuscripcion = await Cliente.aggregate([
-      { $group: {
-        _id: "$tipoSuscripcion",
-        cantidad: { $sum: 1 }
-      }}
-    ]);
-    
-    const resumenSuscripciones = {
-      ninguna: 0,
-      diaria: 0,
-      mensual: 0
-    };
-    
-    clientesPorSuscripcion.forEach(item => {
-      resumenSuscripciones[item._id] = item.cantidad;
-    });
-    
-    res.json({
-      clientesFrecuentes: clientes,
-      resumenSuscripciones
-    });
-  } catch (error) {
-    console.error('Error al generar reporte de clientes frecuentes:', error);
-    res.status(500).json({ error: 'Error al generar el reporte de clientes frecuentes' });
-  }
+/**
+ * Genera reporte de vehículos por tipo
+ */
+exports.reporteVehiculos = async (req, res) => {
+    try {
+        // Contar vehículos por tipo
+        const totalVehiculos = await Vehiculo.countDocuments();
+        const carros = await Vehiculo.countDocuments({ tipoVehiculo: 'carro' });
+        const motos = await Vehiculo.countDocuments({ tipoVehiculo: 'moto' });
+        const bicicletas = await Vehiculo.countDocuments({ tipoVehiculo: 'bicicleta' });
+        
+        // Vehículos más frecuentes (top 5 marcas)
+        const marcasPopulares = await Vehiculo.aggregate([
+            { $group: { _id: '$marca', cantidad: { $sum: 1 } } },
+            { $sort: { cantidad: -1 } },
+            { $limit: 5 }
+        ]);
+        
+        res.status(200).json({
+            totalVehiculos,
+            distribucionPorTipo: {
+                carros,
+                motos,
+                bicicletas
+            },
+            porcentajePorTipo: {
+                carros: totalVehiculos > 0 ? ((carros / totalVehiculos) * 100).toFixed(2) + '%' : '0%',
+                motos: totalVehiculos > 0 ? ((motos / totalVehiculos) * 100).toFixed(2) + '%' : '0%',
+                bicicletas: totalVehiculos > 0 ? ((bicicletas / totalVehiculos) * 100).toFixed(2) + '%' : '0%'
+            },
+            marcasMasComunes: marcasPopulares.map(item => ({
+                marca: item._id || 'No especificada',
+                cantidad: item.cantidad
+            }))
+        });
+    } catch (error) {
+        console.error('Error al generar reporte de vehículos:', error);
+        res.status(500).json({ mensaje: 'Error al generar reporte de vehículos', error: error.message });
+    }
 };
 
-// @desc    Exportar datos en formato JSON
-// @route   GET /api/reportes/exportar
-// @access  Private/Admin
-exports.exportarDatos = async (req, res) => {
-  try {
-    const { tipo } = req.query;
-    
-    let datos = {};
-    
-    if (tipo === 'vehiculos' || !tipo) {
-      datos.vehiculos = await Vehiculo.find();
+/**
+ * Genera reporte de suscripciones
+ */
+exports.reporteSuscripciones = async (req, res) => {
+    try {
+        // Contar clientes por tipo de suscripción
+        const totalClientes = await Cliente.countDocuments();
+        const sinSuscripcion = await Cliente.countDocuments({ tipoSuscripcion: 'ninguna' });
+        const suscripcionDiaria = await Cliente.countDocuments({ tipoSuscripcion: 'diaria' });
+        const suscripcionMensual = await Cliente.countDocuments({ tipoSuscripcion: 'mensual' });
+        
+        // Calcular ingresos por suscripciones (asumiendo valores fijos por tipo)
+        const valorDiario = 5000; // Valor ejemplo
+        const valorMensual = 100000; // Valor ejemplo
+        
+        const ingresosDiarios = suscripcionDiaria * valorDiario;
+        const ingresosMensuales = suscripcionMensual * valorMensual;
+        const ingresosTotales = ingresosDiarios + ingresosMensuales;
+        
+        res.status(200).json({
+            totalClientes,
+            distribucionSuscripciones: {
+                ninguna: sinSuscripcion,
+                diaria: suscripcionDiaria,
+                mensual: suscripcionMensual
+            },
+            porcentajeSuscripciones: {
+                ninguna: totalClientes > 0 ? ((sinSuscripcion / totalClientes) * 100).toFixed(2) + '%' : '0%',
+                diaria: totalClientes > 0 ? ((suscripcionDiaria / totalClientes) * 100).toFixed(2) + '%' : '0%',
+                mensual: totalClientes > 0 ? ((suscripcionMensual / totalClientes) * 100).toFixed(2) + '%' : '0%'
+            },
+            ingresos: {
+                diarios: ingresosDiarios,
+                mensuales: ingresosMensuales,
+                total: ingresosTotales
+            }
+        });
+    } catch (error) {
+        console.error('Error al generar reporte de suscripciones:', error);
+        res.status(500).json({ mensaje: 'Error al generar reporte de suscripciones', error: error.message });
     }
-    
-    if (tipo === 'clientes' || !tipo) {
-      datos.clientes = await Cliente.find();
+};
+
+/**
+ * Genera reporte de uso diario
+ */
+exports.reporteUsoDiario = async (req, res) => {
+    try {
+        const { fecha } = req.query;
+        
+        // Si no se proporciona fecha, usar la fecha actual
+        const fechaConsulta = fecha ? new Date(fecha) : new Date();
+        
+        // Establecer inicio y fin del día
+        const inicioDia = new Date(fechaConsulta.setHours(0, 0, 0, 0));
+        const finDia = new Date(fechaConsulta.setHours(23, 59, 59, 999));
+        
+        // Consultar registros del día
+        const registrosDia = await Registro.find({
+            $or: [
+                { fechaEntrada: { $gte: inicioDia, $lte: finDia } },
+                { fechaSalida: { $gte: inicioDia, $lte: finDia } },
+                {
+                    fechaEntrada: { $lte: inicioDia },
+                    fechaSalida: { $gte: finDia } // Vehículos que estaban antes y siguen después
+                }
+            ]
+        }).populate('vehiculo', 'placa tipoVehiculo')
+          .populate('cliente', 'nombre documento');
+        
+        // Agrupar registros por hora
+        const registrosPorHora = Array(24).fill(0);
+        
+        registrosDia.forEach(registro => {
+            if (registro.fechaEntrada >= inicioDia && registro.fechaEntrada <= finDia) {
+                const hora = registro.fechaEntrada.getHours();
+                registrosPorHora[hora]++;
+            }
+        });
+        
+        // Estadísticas generales
+        const entradasTotales = registrosDia.filter(r => 
+            r.fechaEntrada >= inicioDia && r.fechaEntrada <= finDia
+        ).length;
+        
+        const salidasTotales = registrosDia.filter(r => 
+            r.fechaSalida >= inicioDia && r.fechaSalida <= finDia
+        ).length;
+        
+        const ocupacionMaxima = registrosDia.reduce((max, _, i) => {
+            // Contar vehículos presentes a cada hora
+            const presentes = registrosDia.filter(r => {
+                const hora = new Date(inicioDia);
+                hora.setHours(i);
+                return r.fechaEntrada <= hora && (!r.fechaSalida || r.fechaSalida >= hora);
+            }).length;
+            return Math.max(max, presentes);
+        }, 0);
+        
+        res.status(200).json({
+            fecha: inicioDia.toISOString().split('T')[0],
+            resumen: {
+                entradas: entradasTotales,
+                salidas: salidasTotales,
+                ocupacionMaxima
+            },
+            registrosPorHora,
+            horasMasOcupadas: registrosPorHora
+                .map((valor, hora) => ({ hora, valor }))
+                .sort((a, b) => b.valor - a.valor)
+                .slice(0, 3)
+                .map(item => `${item.hora}:00 (${item.valor} entradas)`)
+        });
+    } catch (error) {
+        console.error('Error al generar reporte de uso diario:', error);
+        res.status(500).json({ mensaje: 'Error al generar reporte de uso diario', error: error.message });
     }
-    
-    if (tipo === 'espacios' || !tipo) {
-      datos.espacios = await Espacio.find();
-    }
-    
-    // Añadir metadatos
-    datos.metadatos = {
-      fechaExportacion: new Date(),
-      totalRegistros: {
-        vehiculos: datos.vehiculos ? datos.vehiculos.length : 0,
-        clientes: datos.clientes ? datos.clientes.length : 0,
-        espacios: datos.espacios ? datos.espacios.length : 0
-      }
-    };
-    
-    // Enviar como archivo para descarga
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename=exportacion_${tipo || 'completa'}_${Date.now()}.json`);
-    res.send(JSON.stringify(datos, null, 2));
-    
-  } catch (error) {
-    console.error('Error al exportar datos:', error);
-    res.status(500).json({ error: 'Error al exportar los datos' });
-  }
 };

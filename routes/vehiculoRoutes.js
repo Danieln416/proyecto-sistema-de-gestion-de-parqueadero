@@ -5,7 +5,7 @@ const { verifyToken } = require('../utils');
 
 /**
  * @swagger
- * /api/vehiculos/entrada:
+ * /api/vehiculos:
  *   post:
  *     summary: Registrar entrada de vehículo
  *     tags: [Vehículos]
@@ -32,11 +32,27 @@ const { verifyToken } = require('../utils');
  *       201:
  *         description: Vehículo registrado exitosamente
  *       400:
- *         description: Datos inválidos o vehículo ya estacionado
+ *         description: Datos inválidos o vehículo ya registrado
  *       500:
  *         description: Error del servidor
  */
-router.post('/entrada', verifyToken, vehiculoController.registrarEntrada);
+router.post('/', verifyToken, vehiculoController.registrarEntrada);
+
+/**
+ * @swagger
+ * /api/vehiculos:
+ *   get:
+ *     summary: Obtener todos los vehículos estacionados
+ *     tags: [Vehículos]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de vehículos
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/', verifyToken, vehiculoController.listarVehiculosEstacionados);
 
 /**
  * @swagger
@@ -87,21 +103,5 @@ router.put('/salida/:placa', verifyToken, vehiculoController.registrarSalida);
  *         description: Error del servidor
  */
 router.get('/:placa', verifyToken, vehiculoController.buscarVehiculo);
-
-/**
- * @swagger
- * /api/vehiculos:
- *   get:
- *     summary: Listar vehículos estacionados
- *     tags: [Vehículos]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Lista de vehículos estacionados
- *       500:
- *         description: Error del servidor
- */
-router.get('/', verifyToken, vehiculoController.listarVehiculosEstacionados);
 
 module.exports = router;

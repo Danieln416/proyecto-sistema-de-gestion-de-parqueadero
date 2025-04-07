@@ -1,0 +1,15 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Sistema de Gestión de Parqueadero",
+    "version": "1.0.0",
+    "description": "Documentación de la API para el sistema de gestión de parqueadero"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Servidor local"
+    }
+  ],
+  "paths": {}
+}

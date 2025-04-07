@@ -3,10 +3,8 @@ const Espacio = require('../models/Espacio');
 const Cliente = require('../models/Cliente');
 const { calcularCosto } = require('../utils');
 
-// @desc    Registrar entrada de vehículo
-// @route   POST /api/vehiculos/entrada
-// @access  Private
-exports.registrarEntrada = async (req, res) => {
+// Función original para registrar entrada (renombrada a registrarVehiculo)
+exports.registrarVehiculo = async (req, res) => {
   try {
     const { placa, tipoVehiculo, clienteId } = req.body;
 
@@ -67,9 +65,118 @@ exports.registrarEntrada = async (req, res) => {
   }
 };
 
-// @desc    Registrar salida de vehículo
-// @route   PUT /api/vehiculos/salida/:placa
-// @access  Private
+// Función original para listar vehículos estacionados (renombrada a obtenerVehiculos)
+exports.obtenerVehiculos = async (req, res) => {
+  try {
+    const vehiculos = await Vehiculo.find({ estado: 'estacionado' })
+      .populate('clienteId', 'nombre documento');
+
+    res.json(vehiculos);
+  } catch (error) {
+    console.error('Error al listar vehículos:', error);
+    res.status(500).json({ error: 'Error al obtener la lista de vehículos' });
+  }
+};
+
+// Nueva función para obtener vehículo por ID
+exports.obtenerVehiculoPorId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const vehiculo = await Vehiculo.findById(id)
+      .populate('clienteId', 'nombre documento');
+
+    if (!vehiculo) {
+      return res.status(404).json({ error: 'Vehículo no encontrado' });
+    }
+
+    res.json(vehiculo);
+  } catch (error) {
+    console.error('Error al obtener vehículo por ID:', error);
+    res.status(500).json({ error: 'Error al obtener el vehículo' });
+  }
+};
+
+// Función original para buscar vehículo (renombrada a buscarVehiculoPorPlaca)
+exports.buscarVehiculoPorPlaca = async (req, res) => {
+  try {
+    const { placa } = req.params;
+    
+    const vehiculo = await Vehiculo.findOne({ placa: placa.toUpperCase() })
+      .populate('clienteId', 'nombre documento');
+
+    if (!vehiculo) {
+      return res.status(404).json({ error: 'Vehículo no encontrado' });
+    }
+
+    res.json(vehiculo);
+  } catch (error) {
+    console.error('Error al buscar vehículo:', error);
+    res.status(500).json({ error: 'Error al buscar el vehículo' });
+  }
+};
+
+// Nueva función para actualizar vehículo
+exports.actualizarVehiculo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { marca, modelo, color } = req.body;
+    
+    const vehiculo = await Vehiculo.findById(id);
+    
+    if (!vehiculo) {
+      return res.status(404).json({ error: 'Vehículo no encontrado' });
+    }
+    
+    // Actualizar solo los campos proporcionados
+    if (marca) vehiculo.marca = marca;
+    if (modelo) vehiculo.modelo = modelo;
+    if (color) vehiculo.color = color;
+    
+    await vehiculo.save();
+    
+    res.json({
+      mensaje: 'Vehículo actualizado exitosamente',
+      vehiculo
+    });
+  } catch (error) {
+    console.error('Error al actualizar vehículo:', error);
+    res.status(500).json({ error: 'Error al actualizar el vehículo' });
+  }
+};
+
+// Nueva función para eliminar vehículo
+exports.eliminarVehiculo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const vehiculo = await Vehiculo.findById(id);
+    
+    if (!vehiculo) {
+      return res.status(404).json({ error: 'Vehículo no encontrado' });
+    }
+    
+    // Si el vehículo está estacionado, liberar el espacio
+    if (vehiculo.estado === 'estacionado') {
+      await Espacio.findOneAndUpdate(
+        { codigo: vehiculo.espacioAsignado },
+        { estado: 'disponible', vehiculoActual: null }
+      );
+    }
+    
+    await Vehiculo.findByIdAndDelete(id);
+    
+    res.json({
+      mensaje: 'Vehículo eliminado exitosamente'
+    });
+  } catch (error) {
+    console.error('Error al eliminar vehículo:', error);
+    res.status(500).json({ error: 'Error al eliminar el vehículo' });
+  }
+};
+
+// Mantener las funciones originales por compatibilidad
+exports.registrarEntrada = exports.registrarVehiculo;
 exports.registrarSalida = async (req, res) => {
   try {
     const { placa } = req.params;
@@ -130,39 +237,5 @@ exports.registrarSalida = async (req, res) => {
     res.status(500).json({ error: 'Error al registrar la salida del vehículo' });
   }
 };
-
-// @desc    Buscar vehículo por placa
-// @route   GET /api/vehiculos/:placa
-// @access  Private
-exports.buscarVehiculo = async (req, res) => {
-  try {
-    const { placa } = req.params;
-    
-    const vehiculo = await Vehiculo.findOne({ placa: placa.toUpperCase() })
-      .populate('clienteId', 'nombre documento');
-
-    if (!vehiculo) {
-      return res.status(404).json({ error: 'Vehículo no encontrado' });
-    }
-
-    res.json(vehiculo);
-  } catch (error) {
-    console.error('Error al buscar vehículo:', error);
-    res.status(500).json({ error: 'Error al buscar el vehículo' });
-  }
-};
-
-// @desc    Listar vehículos estacionados
-// @route   GET /api/vehiculos
-// @access  Private
-exports.listarVehiculosEstacionados = async (req, res) => {
-  try {
-    const vehiculos = await Vehiculo.find({ estado: 'estacionado' })
-      .populate('clienteId', 'nombre documento');
-
-    res.json(vehiculos);
-  } catch (error) {
-    console.error('Error al listar vehículos:', error);
-    res.status(500).json({ error: 'Error al obtener la lista de vehículos' });
-  }
-};
+exports.buscarVehiculo = exports.buscarVehiculoPorPlaca;
+exports.listarVehiculosEstacionados = exports.obtenerVehiculos;
