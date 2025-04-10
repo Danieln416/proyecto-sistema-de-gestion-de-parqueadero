@@ -235,8 +235,8 @@ exports.registrarSalida = async (req, res) => {
     res.json({
       mensaje: 'Salida registrada exitosamente',
       placa: vehiculo.placa,
-      tiempoEstacionado: tiempoEstacionado / (1000 * 60 * 60), // en horas
-      costo
+      tiempoEstacionado: `${(tiempoEstacionado / (1000 * 60 * 60)).toFixed(2)} horas`, // en horas
+      costo: `${costo} pesos`
     });
   } catch (error) {
     console.error('Error al registrar salida:', error);
