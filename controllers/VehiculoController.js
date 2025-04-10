@@ -71,7 +71,7 @@ exports.registrarVehiculo = async (req, res) => {
   }
 };
 
-// Función original para listar vehículos estacionados (renombrada a obtenerVehiculos)
+// Función original para listar vehículos estacionados 
 exports.obtenerVehiculos = async (req, res) => {
   try {
     const vehiculos = await Vehiculo.find({ estado: 'estacionado' })
