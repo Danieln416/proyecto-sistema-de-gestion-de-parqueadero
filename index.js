@@ -22,8 +22,14 @@ app.use(morgan('dev'));
 
 // Conexión a la base de datos
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('Conectado a MongoDB'))
-  .catch(err => console.error('Error conectando a MongoDB:', err));
+   .then(() => console.log('Conectado a MongoDB'))
+   .catch(err => console.error('Error conectando a MongoDB:', err));
+// mongoose.connect('mongodb://localhost:27017/parqueadero', {
+//   useNewUrlParser: true,
+//   useUnifiedTopology: true
+// })
+//   .then(() => console.log('Conectado a MongoDB'))
+//   .catch(err => console.error('Error conectando a MongoDB:', err));
 
 // Configuración de rutas
 app.use('/api/auth', authRoutes);

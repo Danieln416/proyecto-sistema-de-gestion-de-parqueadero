@@ -3,7 +3,7 @@ require('dotenv').config();
 
 // Middleware para verificar token JWT
 const verifyToken = (req, res, next) => {
-  const token = req.header('auth-token');
+  const token = req.header('Authorization')?.replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'Acceso denegado' });
 
   try {
@@ -18,9 +18,9 @@ const verifyToken = (req, res, next) => {
 // Función para calcular el costo de estacionamiento
 const calcularCosto = (tiempoEstacionado, tipoVehiculo) => {
   const tarifas = {
-    carro: 2000, // por hora
-    moto: 1000,  // por hora
-    bicicleta: 500 // por hora
+    carro: 4000, // por hora
+    moto: 2000,  // por hora
+    bicicleta: 1000 // por hora
   };
 
   // Tiempo en horas

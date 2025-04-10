@@ -20,6 +20,12 @@ exports.registrarVehiculo = async (req, res) => {
       });
     }
 
+    if (tipoVehiculo !== 'carro' && tipoVehiculo !== 'moto' && tipoVehiculo !== 'bicicleta') {
+      return res.status(400).json({
+        error: `${tipoVehiculo} No es un tipo de vehículo válido. Debe ser carro, moto o bicicleta.`
+      });
+    }
+
     // Buscar espacio disponible para el tipo de vehículo
     const espacioDisponible = await Espacio.findOne({ 
       tipoEspacio: tipoVehiculo, 
