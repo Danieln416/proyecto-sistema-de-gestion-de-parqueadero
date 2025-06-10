@@ -16,7 +16,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true
+}));
 app.use(express.json());
 app.use(morgan('dev'));
 
@@ -41,6 +44,11 @@ app.use('/api/reportes', reporteRoutes); // Configuramos las rutas de reportes
 // Ruta principal
 app.get('/', (req, res) => {
   res.send('API del sistema de gestión de parqueadero funcionando');
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'OK' });
 });
 
 // Manejador de errores

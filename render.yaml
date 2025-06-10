@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: parking-system-api
+    runtime: node
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+    plan: free
+    branch: main
+    healthCheckPath: /api/health
+    numInstances: 1
+    pullRequestPreviewsEnabled: false
